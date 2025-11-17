@@ -1,13 +1,11 @@
-# Stage 1: Build React app (optional if you want multi-stage)
-# FROM node:18 as builder
-# WORKDIR /app
-# COPY package*.json ./
-# RUN npm install
-# COPY . .
-# RUN npm run build
-
-# Stage 2: Serve with Nginx
+# Use Nginx image
 FROM nginx:alpine
+
+# Copy React build to Nginx html folder
 COPY build/ /usr/share/nginx/html
+
+# Expose port 80
 EXPOSE 80
+
+# Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
