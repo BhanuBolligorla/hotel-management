@@ -1,6 +1,5 @@
 name: React CI/CD
 
-# When should the workflow run?
 on:
   push:
     branches: [ "main" ]
@@ -9,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest   # GitHub cloud runner
+    runs-on: ubuntu-latest
 
     env:
       DOCKER_USER: bhanu4309
@@ -17,13 +16,13 @@ jobs:
     steps:
 
       # -------------------------------
-      # STEP 1: Checkout code from GitHub
+      # Checkout Code
       # -------------------------------
       - name: Checkout Code
         uses: actions/checkout@v3
 
       # -------------------------------
-      # STEP 2: SonarQube Scan
+      # SonarQube Analysis
       # -------------------------------
       - name: Run SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@v2
@@ -36,7 +35,7 @@ jobs:
             -Dsonar.sources=src
 
       # -------------------------------
-      # STEP 3: Setup Node and Build React App
+      # Build React App
       # -------------------------------
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -59,7 +58,7 @@ jobs:
           ./node_modules/.bin/bestzip artifacts/myweb-$BUILD_NUMBER.zip build/*
 
       # -------------------------------
-      # STEP 4: Upload to Nexus
+      # Upload to Nexus
       # -------------------------------
       - name: Upload Build Artifact to Nexus
         run: |
@@ -69,16 +68,16 @@ jobs:
             http://3.236.243.28:8081/repository/npm-releases/myweb-$BUILD_NUMBER.zip
 
       # -------------------------------
-      # STEP 5: Login to DockerHub
+      # Login to DockerHub (using PASSWORD secret)
       # -------------------------------
       - name: Login to DockerHub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}   # <= Using password secret
 
       # -------------------------------
-      # STEP 6: Build and Tag Docker Image
+      # Build Docker Image
       # -------------------------------
       - name: Build Docker Image
         run: |
@@ -87,7 +86,7 @@ jobs:
           docker tag $DOCKER_USER/myreactapp:$BUILD_NUMBER $DOCKER_USER/myreactapp:latest
 
       # -------------------------------
-      # STEP 7: Push Docker Image
+      # Push Docker Image
       # -------------------------------
       - name: Push Docker Image to DockerHub
         run: |
@@ -96,7 +95,7 @@ jobs:
           docker push $DOCKER_USER/myreactapp:latest
 
       # -------------------------------
-      # STEP 8: RUN Container (ONLY on self-hosted runner)
+      # Run Container (only on self-hosted runner)
       # -------------------------------
       - name: Run Container
         if: runner.name == 'self-hosted'
