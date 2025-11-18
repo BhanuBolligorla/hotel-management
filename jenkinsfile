@@ -1,0 +1,107 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKERHUB = credentials('DockerHub')     // DockerHub credentials (username + access token)
+        DOCKER_USER = "bhanu4309"               // Your DockerHub username
+    }
+
+    stages {
+
+        stage('Checkout React App') {
+            steps {
+                git branch: 'main', url: 'https://github.com/BhanuBolligorla/hotel-management.git'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarqube') {
+                    script {
+                        docker.image('sonarsource/sonar-scanner-cli:latest').inside {
+                            sh """
+                                sonar-scanner \
+                                -Dsonar.projectKey=hotel-management \
+                                -Dsonar.sources=src \
+                                -Dsonar.host.url=$SONAR_HOST_URL \
+                                -Dsonar.login=$SONAR_AUTH_TOKEN
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build React App & Zip') {
+            steps {
+                script {
+                    docker.image('node:18').inside {
+                        sh 'npm ci'
+                        sh 'npm run build'
+                        sh 'npm install --save-dev bestzip'
+                        sh './node_modules/.bin/bestzip myweb-${BUILD_NUMBER}.zip build/*'
+                    }
+                }
+            }
+        }
+
+        stage('Upload Build Artifact to Nexus') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'nexus',
+                        usernameVariable: 'NEXUS_USR',
+                        passwordVariable: 'NEXUS_PSW'
+                    )
+                ]) {
+                    sh """
+                        curl -u ${NEXUS_USR}:${NEXUS_PSW} --upload-file myweb-${BUILD_NUMBER}.zip \
+                        http://3.236.243.28:8081/repository/npm-releases/myweb-${BUILD_NUMBER}.zip
+                    """
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Build image with version tag
+                    def appImage = docker.build("${DOCKER_USER}/myreactapp:${BUILD_NUMBER}")
+
+                    // Tag image as latest
+                    sh "docker tag ${DOCKER_USER}/myreactapp:${BUILD_NUMBER} ${DOCKER_USER}/myreactapp:latest"
+                }
+            }
+        }
+
+        stage('Push Docker Image to DockerHub') {
+            steps {
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', 'DockerHub') {
+
+                        // Push version tag
+                        docker.image("${DOCKER_USER}/myreactapp:${BUILD_NUMBER}").push()
+
+                        // Push latest tag
+                        docker.image("${DOCKER_USER}/myreactapp:latest").push()
+                    }
+                }
+            }
+        }
+
+        stage('Run Container for Verification') {
+            steps {
+                script {
+                    sh "docker rm -f react-app || true"
+                    sh "docker run -d --name react-app -p 80:80 ${DOCKER_USER}/myreactapp:latest"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline finished. Access your app at http://<server-ip>/"
+        }
+    }
+}
